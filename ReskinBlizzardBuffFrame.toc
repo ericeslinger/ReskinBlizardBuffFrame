@@ -1,0 +1,10 @@
+## Interface: 16001, 120105, 120107
+## Title: Reskin Blizzard Buff Frame
+## Notes: Move and scale Blizzard's buff and debuff frames on clients whose Edit Mode will not. /rbf
+## Author: Eric Eslinger
+## Version: 0.1.0
+## IconTexture: Interface\Icons\Spell_Holy_WordFortitude
+## SavedVariables: ReskinBlizzardBuffFrameDB
+## X-License: MIT
+
+ReskinBlizzardBuffFrame.lua
