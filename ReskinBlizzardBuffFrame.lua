@@ -93,14 +93,19 @@ end
 -- drag overlays
 -- ---------------------------------------------------------------------------
 
-local function SavePosition(key, f)
-    -- store as the frame's current anchor relative to UIParent, using the
-    -- configured point so the frame keeps growing the same direction
+-- Save the frame's position from the overlay's rectangle. The overlay has been
+-- moved for many frames so its rect is current; the frame's own rect is stale
+-- until the next layout pass, so it must not be read here. The overlay's
+-- TOPLEFT is where the frame's TOPLEFT goes; the frame's size (in UIParent
+-- units) gives the other edges. The configured point is kept so the frame
+-- keeps growing the same way.
+local function SavePosition(key, f, overlay)
     local point = db[key].point
-    local scale = f:GetEffectiveScale() / UIParent:GetEffectiveScale()
-    local x, y
-    local l, r, t, b = f:GetLeft() * scale, f:GetRight() * scale, f:GetTop() * scale, f:GetBottom() * scale
+    local s = f:GetScale()
+    local l, t = overlay:GetLeft(), overlay:GetTop()
+    local r, b = l + f:GetWidth() * s, t - f:GetHeight() * s
     local W, H = UIParent:GetWidth(), UIParent:GetHeight()
+    local x, y
     if point:find("LEFT") then x = l elseif point:find("RIGHT") then x = r - W else x = (l + r) / 2 - W / 2 end
     if point:find("TOP") then y = t - H elseif point:find("BOTTOM") then y = b else y = (t + b) / 2 - H / 2 end
     db[key].x, db[key].y = math.floor(x + 0.5), math.floor(y + 0.5)
@@ -125,16 +130,14 @@ local function Overlay(key, f, label)
     end)
     o:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
-        -- move the real frame to the overlay, then re-anchor it from there
-        applying = true
-        f:ClearAllPoints()
-        f:SetPoint("TOPLEFT", self, "TOPLEFT", 0, 0)
-        applying = false
         if key == "debuffs" then db.debuffs.follow = false end
-        SavePosition(key, f)
+        SavePosition(key, f, self)
         Apply()
-        self:ClearAllPoints()
-        self:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+        -- the overlay follows the frame again from the next layout pass
+        C_Timer.After(0, function()
+            self:ClearAllPoints()
+            self:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+        end)
     end)
     o:Hide()
     overlays[key] = o
@@ -176,7 +179,7 @@ local function Help()
     Print("/rbf scale <0.5-2>")
     Print("/rbf buffs <point> <x> <y>   e.g. /rbf buffs TOPRIGHT -10 -40")
     Print("/rbf debuffs <point> <x> <y> | /rbf debuffs follow")
-    Print("/rbf reset")
+    Print("/rbf reset | /rbf dump (diagnostic)")
     Print(("now: scale %.2f, buffs %s %d %d, debuffs %s"):format(db.scale, db.buffs.point, db.buffs.x, db.buffs.y,
         db.debuffs.follow and "follow" or ("%s %d %d"):format(db.debuffs.point, db.debuffs.x, db.debuffs.y)))
 end
@@ -209,6 +212,37 @@ SlashCmdList.RESKINBLIZZARDBUFFFRAME = function(msg)
         if sub == "debuffs" then db.debuffs.follow = false end
         Apply()
         Print(("%s at %s %d %d"):format(sub, point, x, y))
+    elseif sub == "dump" then
+        local buffs, debuffs = Frames()
+        for _, pair in ipairs({ { "BuffFrame", buffs }, { "DebuffFrame", debuffs } }) do
+            local nm, f = pair[1], pair[2]
+            if not f then Print(nm .. ": nil") else
+                Print(("%s: type=%s size=%dx%d scale=%.2f"):format(nm, f:GetObjectType(), f:GetWidth(), f:GetHeight(), f:GetScale()))
+                local keys = {}
+                for k, v in pairs(f) do
+                    if type(k) == "string" and (type(v) ~= "function" or k:find("Direction") or k:find("Layout") or k:find("Grid") or k:find("Orient")) then
+                        keys[#keys + 1] = k .. (type(v) == "function" and "()" or ("=" .. tostring(v)))
+                    end
+                end
+                table.sort(keys)
+                Print("  fields: " .. table.concat(keys, ", "))
+                local meth = {}
+                local mt = getmetatable(f)
+                local idx = mt and mt.__index
+                if type(idx) == "table" then
+                    for k in pairs(idx) do
+                        if type(k) == "string" and (k:find("Direction") or k:find("Layout") or k:find("Grid") or k:find("Orient") or k:find("Icon") or k:find("Stride")) then
+                            meth[#meth + 1] = k
+                        end
+                    end
+                end
+                table.sort(meth)
+                Print("  methods: " .. (#meth > 0 and table.concat(meth, ", ") or "(none matching)"))
+                local kids = {}
+                for _, c in ipairs({ f:GetChildren() }) do kids[#kids + 1] = (c:GetName() or "?") .. ":" .. c:GetObjectType() end
+                Print("  children: " .. (#kids > 0 and table.concat(kids, ", ") or "(none)"))
+            end
+        end
     elseif sub == "reset" then
         wipe(db)
         CopyDefaults(db, DEFAULTS)

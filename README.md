@@ -18,6 +18,7 @@ Blizzard's frame still has both. This addon just puts it where you want it.
 /rbf debuffs <point> <x> <y>
 /rbf debuffs follow       hang the debuffs under the buffs (default)
 /rbf reset                defaults
+/rbf dump                 print what the client exposes on the frames (diagnostic)
 ```
 
 Points are the usual anchor names (`TOPLEFT`, `TOPRIGHT`, `CENTER`, …), offsets are in
